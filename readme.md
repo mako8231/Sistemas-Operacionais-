@@ -363,5 +363,190 @@ int main(){
 }
  
 ```
+## Extra: O código de eventos do Moro:
+
+```cpp
+#include <process.h>
+#include <windows.h>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
+#include <vector>
+
+using namespace std;
+
+typedef struct {
+	int id;
+	int cont;
+	bool stopThread;
+} PARAM;
+
+long int contador = 0;
+long int contadorunico = 0;
+
+void testeparametro(void* parametroFuncao);
+
+
+HANDLE hMutex;
+HANDLE hSemafaro;
+
+HANDLE hEvento;
+HANDLE hEvento1;
+
+CRITICAL_SECTION hSecaoCritica;
+
+bool finaliza = false;
+
+int main()
+{
+	time_t tinicial, tfinal;
+
+	int n_threads = 2;
+
+	vector<HANDLE> hThread;
+	vector<PARAM> vetorparametros;
+	PARAM adicionaVetor;
+
+
+	hMutex = CreateMutex(NULL, FALSE, NULL);
+	hSemafaro = CreateSemaphore(NULL, 2, 2, NULL);
+	InitializeCriticalSection(&hSecaoCritica);
+
+    hEvento = CreateEvent(NULL, TRUE, FALSE, NULL);
+	hEvento1 = CreateEvent(NULL, TRUE, TRUE, NULL);
+
+	//  tinicial = time(0);
+
+	for (int i = 0; i < n_threads; i++)
+	{
+		adicionaVetor.id = i;
+		adicionaVetor.cont = 0;
+		adicionaVetor.stopThread = FALSE;
+		vetorparametros.push_back(adicionaVetor);
+	}
+
+	for (int i = 0; i < n_threads; i++)
+	{
+		//hThread[i] = (HANDLE)_beginthread(contar, 1, &param[i]);
+		hThread.push_back(CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&testeparametro, &vetorparametros[i], CREATE_SUSPENDED, NULL));  // 0 inicia a thread em execução
+		// hThread_01[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&contar, &vetorparametros[i], CREATE_SUSPENDED, NULL);
+	}
+
+	cout << " Mudando a Prioridade da Thread 0/2 !!!" << endl;
+	getchar();
+
+	SetThreadPriority(hThread[0], THREAD_PRIORITY_HIGHEST);
+	SetThreadPriority(hThread[1], THREAD_PRIORITY_LOWEST);
+
+	cout << "Prioridade Alterada !!! " << endl;
+
+	for (int i = 0; i < n_threads; i++) {
+		cout << "Prioridade da Thread " << i << " " << GetThreadPriority(hThread[i]) << endl;
+	}
+
+	cout << "Aguardando Acordar as Threads !!! " << endl;
+	getchar();
+
+	for (int i = 0; i < n_threads; i++) {
+		ResumeThread(hThread[i]); // Inicia/retorna a execução de uma Thread após ser suspensa
+	}
+
+	cout << "threads Acordadas e Aguardando a Finalização!!! " << endl;
+
+	cout << "Aguardando Gerar Evento !!! " << endl;
+	getchar();
+	PulseEvent(hEvento);
+	getchar();
+	cout << "Aguardando Gerar Evento !!! " << endl;
+	PulseEvent(hEvento);
+	getchar();
+	cout << "Aguardando Gerar Evento !!! " << endl;
+	PulseEvent(hEvento);
+	getchar();
+	cout << "Mudando o evento para TRUE !!! " << endl;
+	SetEvent(hEvento);
+	
+	WaitForMultipleObjects(n_threads, hThread.data(), TRUE, INFINITE);
+
+	cout << "O Valor Total e " << contadorunico << endl;
+
+	/*	WaitForSingleObject(hMutex_01, INFINITE); // Inicio Seção Critica
+			cout << "Aguardando para Encerrar as Threads " << endl;
+		ReleaseMutex(hMutex_01);  // Fim Seção Critica
+
+
+	*/
+
+	//SetEvent(hEvento);
+	//Sleep(3000);
+
+	/*	for (int i = 0; i < n_threads; i++) {
+			contadorunico = contadorunico + vetorparametros[i].cont;
+		}*/
+		//tfinal = time(0);
+		//cout << "O tempo total de execução foi " << tfinal - tinicial << endl;
+		//cout << " Valor Total e " << contadorunico << endl;
+
+	system("pause");
+
+	for (int i = 0; i < n_threads; i++) {
+		CloseHandle(hThread[i]);
+	}
+
+	CloseHandle(hMutex);
+	CloseHandle(hSemafaro);
+
+	CloseHandle(hEvento);
+	CloseHandle(hEvento1);
+
+	DeleteCriticalSection(&hSecaoCritica);
+
+	return 0;
+}
+void testeparametro(void* parametroFuncao)
+{
+	PARAM* parametro = (PARAM*)parametroFuncao;
+	
+	long int c = 1;
+	long int temp = 0;
+
+	WaitForSingleObject(hMutex, INFINITE); // Inicio Seção Critica
+	  cout << "Tread ID " << parametro->id << endl;
+	  cout << "Valor cont " << parametro->cont << endl;
+	ReleaseMutex(hMutex);
+
+	WaitForSingleObject(hSemafaro, INFINITE);
+
+	cout << "Inicializando o processamento da Thread " << parametro->id << endl;
+
+	ReleaseSemaphore(hSemafaro,1,NULL);
+
+
+	while (c <= 100) {
+	
+		WaitForSingleObject(hEvento, INFINITE); // aguardando a geração de um sinal (evento)
+
+		if (parametro->stopThread) {
+			break;
+		}
+
+		EnterCriticalSection(&hSecaoCritica); // Inicio Seção Critica
+		cout << "Thread " << parametro->id << " fez uma interacao !!!" << "Valor c " << c << endl;
+		   contadorunico += 1;
+		   parametro->cont++;
+		LeaveCriticalSection(&hSecaoCritica);  // Fim Seção Critica
+
+		c = c + 1;
+
+		//WaitForSingleObject(hEvento, INFINITE);
+		//cout << "Contei + 1 " << "Thread " << parametro->id << " " << contador << endl;
+
+	}
+	_endthread();
+}
+
+```
 
 [Fonte: Win32 Multithreading and Synchronization](https://faq.programmerworld.net/programming/win32-multithreading-and-synchronization.html)
